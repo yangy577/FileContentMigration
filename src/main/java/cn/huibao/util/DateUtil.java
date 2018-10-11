@@ -26,6 +26,11 @@ public class DateUtil {
         return LocalDate.parse(dateStr, ymd);
     }
 
+    public static DayOfWeek getDayOfWeekFromStr(String dateStr) {
+        LocalDate localDate = getLocalDateFromStr(dateStr);
+        return localDate.getDayOfWeek();
+    }
+
     /**
      * 根据传入的日期字符串（yyyyMMdd），期望的星期，判断是否符合
      * @param dateStr 日期字符串
