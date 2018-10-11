@@ -29,8 +29,8 @@ public class FengZhiShiDuanZhuanZhiService {
     /**
      * 获取本周早晚高峰1-5 上周6 日
      */
-    public Map<DayOfWeek, String> findFengZhiShiDuanZhuanZhi(XSSFWorkbook yongDuZhiShuWorkbook) {
-        XSSFSheet sheet = yongDuZhiShuWorkbook.getSheet(CommonUtil.SHEET_NAME);
+    public Map<DayOfWeek, String> findFengZhiShiDuanZhuanZhi(XSSFWorkbook fengZhiShiDuanZhuanZhiWorkbook) {
+        XSSFSheet sheet = fengZhiShiDuanZhuanZhiWorkbook.getSheet(CommonUtil.SHEET_NAME);
         int lastNum = sheet.getLastRowNum();
         Map<DayOfWeek, String> result = Maps.newHashMap();
 

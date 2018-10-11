@@ -15,6 +15,7 @@ import org.apache.poi.xssf.usermodel.XSSFWorkbook;
 
 import java.time.DayOfWeek;
 import java.util.Iterator;
+import java.util.List;
 import java.util.Map;
 
 /**
@@ -72,15 +73,25 @@ public class ChuGaoOperationService {
     // 在 sheet1-拥堵指数excel 中的列数 8
     private static final int YONGDUSHICHANG_SHEET_EIGHT = 3;
 
+    // 决策树中用到的
+    private static final String ZAO_QUANUWANG = "zao";
+    private static final String WAN_QUANLUWANG = "wan";
+    private static final String SIX_QUANLUWANG = "six";
+    private static final String EIGHT_QUANLUWANG = "eight";
+    private static final String FENG_QUANLUWANG = "feng";
+    private static final String FENGZHI_SHIDUAN_QUANLUWANG = "fengzhiShiduan";
+
 
     private ZaoWanGaoFengZhiShuService zaoWanGaoFengZhiShuService;
     private FengZhiShiDuanZhuanZhiService fengZhiShiDuanZhuanZhiService;
     private YongDuShiChangService yongDuShiChangService;
+    private QuanLuWangService quanLuWangService;
 
     public ChuGaoOperationService() {
         this.zaoWanGaoFengZhiShuService = new ZaoWanGaoFengZhiShuService();
         this.fengZhiShiDuanZhuanZhiService = new FengZhiShiDuanZhuanZhiService();
         this.yongDuShiChangService = new YongDuShiChangService();
+        this.quanLuWangService = new QuanLuWangService();
     }
 
     // 获取早晚高峰指数
@@ -88,15 +99,22 @@ public class ChuGaoOperationService {
     // 获取 峰值时段转置表.xlsx 中的峰值
     //Map<DayOfWeek, String> fengZhiShiDuanZhuanZhi = fengZhiShiDuanZhuanZhiService.findFengZhiShiDuanZhuanZhi()
     //
-    public void operations(XSSFWorkbook workbook, XSSFWorkbook zaowangaofengWorkbook,
-                           Map<DayOfWeek, Row> zaoWanGaoFengZhiShu,
-                           Map<DayOfWeek, String> fengZhiShiDuan,
-                           Map<DayOfWeek, Row> yongDuShiChang,
+    public void operations(XSSFWorkbook workbook,
+                           XSSFWorkbook zaowangaofengWorkbook,
+                           XSSFWorkbook yongDuZhiShuWorkBook,
+                           XSSFWorkbook fengZhiShiDuanZhuanZhiWorkbook,
+                           XSSFWorkbook quanLuWangWorkbook,
                            String zhou, String benginDate, String endDate) throws Exception {
         XSSFSheet sheet = workbook.getSheet(CommonUtil.SHEET_ZHI_SHU_YUCE);
         if (sheet == null) {
             throw new Exception("无法获取" + CommonUtil.SHEET_ZHI_SHU_YUCE + ", 请检查初稿中是否有该Sheet");
         }
+
+        // 获取数据
+        Map<DayOfWeek, Row> yongDuShiChang = yongDuShiChangService.findYongDuShiChang(yongDuZhiShuWorkBook);
+        Map<DayOfWeek, String> fengZhiShiDuan = fengZhiShiDuanZhuanZhiService.findFengZhiShiDuanZhuanZhi(fengZhiShiDuanZhuanZhiWorkbook);
+        Map<DayOfWeek, Row> zaoWanGaoFengZhiShu = zaoWanGaoFengZhiShuService.findZaoWanGaoFengZhiShu(zaowangaofengWorkbook);
+        Map<String, List<Object>> quanluwang = quanLuWangService.findQuanLuWang(quanLuWangWorkbook);
 
         /* 开始处理 指数预测Sheet */
         // 插入新一周
@@ -117,6 +135,9 @@ public class ChuGaoOperationService {
 
         // 插入8以上累计时长
         insertYongDuEight(sheet, yongDuShiChang);
+
+        // 插入决策树
+        insertQuanLuWang(sheet, quanluwang);
         /* 结束处理 指数预测Sheet */
 
         /* 开始处理 早晚高峰指数sheet */
@@ -126,6 +147,14 @@ public class ChuGaoOperationService {
         }
         insertSheetZaoWanGaoFeng(zwgfzsSheet, zaoWanGaoFengZhiShu);
         /* 结束处理 早晚高峰指数sheet */
+
+        /* 开始处理 拥堵时长sheet */
+        XSSFSheet ydscSheet = workbook.getSheet(CommonUtil.SHEET_YONG_DU);
+        if (ydscSheet == null) {
+            throw new Exception("无法获取" + CommonUtil.SHEET_YONG_DU + ", 请检查初稿中是否有该Sheet");
+        }
+        insertSheetYongDuShiChang(ydscSheet, yongDuShiChang);
+        /* 结束处理 拥堵时长sheet */
     }
 
 
@@ -186,9 +215,83 @@ public class ChuGaoOperationService {
     private void insertSheetZaoWanGaoFeng(XSSFSheet zwgfzsSheet, Map<DayOfWeek, Row> zaoWanGaoFengZhiShu) {
         int lastNum = zwgfzsSheet.getLastRowNum();
 
-        // FIXME 1 : 几种方式，暂时先试一下操作
+        // 获取几种样式
+        XSSFRow styleRow = zwgfzsSheet.getRow(zwgfzsSheet.getLastRowNum() - 3);
+        CellStyle firstCellStyle = styleRow.getCell(0).getCellStyle();
+        CellStyle normalCellStyle = styleRow.getCell(1).getCellStyle();
+        CellStyle workingDayCellStyle = styleRow.getCell(4).getCellStyle();
+
         for (int i = 0; i < 7; i++) {
-            XSSFRow row = zwgfzsSheet.createRow(lastNum++);
+            XSSFRow row = zwgfzsSheet.createRow(zwgfzsSheet.getLastRowNum() + 1);
+            row.setHeight(styleRow.getHeight());
+            XSSFRow fromRow = getZaoWanGaoFengZhiShuFromMap(zaoWanGaoFengZhiShu, i);
+            for (int j = 0; j < 8; j++) {
+                Cell cell = row.createCell(j);
+                if (j == 0) {
+                    cell.setCellStyle(firstCellStyle);
+                    int num = (int) (zwgfzsSheet.getRow(lastNum).getCell(0).getNumericCellValue() + 1);
+                    cell.setCellValue(num);
+                    continue;
+                }
+                if (j == 5 || j == 6) {
+                    cell.setCellStyle(workingDayCellStyle);
+                    cell.setCellValue(fromRow.getCell(j).getNumericCellValue());
+                    continue;
+                }
+                if (normalCellStyle != null) {
+                    cell.setCellStyle(normalCellStyle);
+                    if (j == 1) {
+                        cell.setCellValue(fromRow.getCell(j).getStringCellValue());
+                    } else {
+                        cell.setCellValue(fromRow.getCell(j).getNumericCellValue());
+                    }
+                }
+            }
+        }
+    }
+
+    // 将 拥堵时长excel 中周一-周五，上周六-周日数据插入 初稿的拥堵时长Sheet中
+    private void insertSheetYongDuShiChang(XSSFSheet ydscSheet, Map<DayOfWeek, Row> yongDuShiChang) {
+        int lastNum = ydscSheet.getLastRowNum();
+
+        // 获取几种样式
+        XSSFRow styleRow = ydscSheet.getRow(ydscSheet.getLastRowNum() - 3);
+        CellStyle firstCellStyle = styleRow.getCell(0).getCellStyle();
+        CellStyle normalCellStyle = styleRow.getCell(1).getCellStyle();
+
+        for (int i = 0; i < 7; i++) {
+            XSSFRow row = ydscSheet.createRow(ydscSheet.getLastRowNum() + 1);
+            row.setHeight(styleRow.getHeight());
+            XSSFRow fromRow = getZaoWanGaoFengZhiShuFromMap(yongDuShiChang, i);
+            for (int j = 0; j < 4; j++) {
+                Cell cell = row.createCell(j);
+                if (j == 0) {
+                    cell.setCellStyle(firstCellStyle);
+                    int num = (int) (ydscSheet.getRow(lastNum).getCell(0).getNumericCellValue() + 1);
+                    cell.setCellValue(num);
+                    continue;
+                }
+                if (normalCellStyle != null) {
+                    cell.setCellStyle(normalCellStyle);
+                    if (j == 1) {
+                        cell.setCellValue(fromRow.getCell(j).getStringCellValue());
+                    } else {
+                        cell.setCellValue(fromRow.getCell(j).getNumericCellValue());
+                    }
+                }
+            }
+        }
+    }
+
+    // 插入决策树 -
+    private void insertQuanLuWang(XSSFSheet sheet, Map<String, List<Object>> juceshu) {
+        for (int colNum = 2; colNum < 9; colNum++) {
+            sheet.getRow(1).getCell(colNum).setCellValue((Double) juceshu.get(ZAO_QUANUWANG).get(colNum - 2));
+            sheet.getRow(2).getCell(colNum).setCellValue((Double) juceshu.get(WAN_QUANLUWANG).get(colNum - 2));
+            sheet.getRow(3).getCell(colNum).setCellValue((Double) juceshu.get(FENG_QUANLUWANG).get(colNum - 2));
+            sheet.getRow(4).getCell(colNum).setCellValue((String) juceshu.get(FENGZHI_SHIDUAN_QUANLUWANG).get(colNum - 2));
+            sheet.getRow(5).getCell(colNum).setCellValue((Double) juceshu.get(SIX_QUANLUWANG).get(colNum - 2));
+            sheet.getRow(6).getCell(colNum).setCellValue((Double) juceshu.get(EIGHT_QUANLUWANG).get(colNum - 2));
         }
     }
 
@@ -246,6 +349,31 @@ public class ChuGaoOperationService {
                 worksheet.addMergedRegionUnsafe(newCellRangeAddress);
             }
         }
+    }
+
+    private XSSFRow getZaoWanGaoFengZhiShuFromMap(Map<DayOfWeek, Row> zaoWanGaoFengZhiShu, int i) {
+        if (i == 0) {
+            return (XSSFRow) zaoWanGaoFengZhiShu.get(DayOfWeek.SATURDAY);
+        }
+        if (i == 1) {
+            return (XSSFRow) zaoWanGaoFengZhiShu.get(DayOfWeek.SUNDAY);
+        }
+        if (i == 2) {
+            return (XSSFRow) zaoWanGaoFengZhiShu.get(DayOfWeek.MONDAY);
+        }
+        if (i == 3) {
+            return (XSSFRow) zaoWanGaoFengZhiShu.get(DayOfWeek.TUESDAY);
+        }
+        if (i == 4) {
+            return (XSSFRow) zaoWanGaoFengZhiShu.get(DayOfWeek.WEDNESDAY);
+        }
+        if (i == 5) {
+            return (XSSFRow) zaoWanGaoFengZhiShu.get(DayOfWeek.THURSDAY);
+        }
+        if (i == 6) {
+            return (XSSFRow) zaoWanGaoFengZhiShu.get(DayOfWeek.FRIDAY);
+        }
+        return null;
     }
 
     /**
