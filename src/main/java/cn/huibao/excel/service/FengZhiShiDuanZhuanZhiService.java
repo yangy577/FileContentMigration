@@ -38,7 +38,7 @@ public class FengZhiShiDuanZhuanZhiService {
         Row row = sheet.getRow(lastNum);
         result.put(DayOfWeek.MONDAY,
                 row.getCell(SHEET_MONDAY) == null ? "" : row.getCell(SHEET_MONDAY).getStringCellValue());
-        result.put(DayOfWeek.THURSDAY,
+        result.put(DayOfWeek.TUESDAY,
                 row.getCell(SHEET_TUESDAY) == null ? "" : row.getCell(SHEET_TUESDAY).getStringCellValue());
         result.put(DayOfWeek.WEDNESDAY,
                 row.getCell(SHEET_WEDNESDAY) == null ? "" : row.getCell(SHEET_WEDNESDAY).getStringCellValue());

@@ -13,7 +13,13 @@ import org.apache.poi.xssf.usermodel.XSSFRow;
 import org.apache.poi.xssf.usermodel.XSSFSheet;
 import org.apache.poi.xssf.usermodel.XSSFWorkbook;
 
+import java.io.FileNotFoundException;
+import java.io.FileOutputStream;
+import java.io.IOException;
+import java.io.OutputStream;
 import java.time.DayOfWeek;
+import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
@@ -51,9 +57,9 @@ public class ChuGaoOperationService {
     // 上周峰值所在行
     private static final int ROW_NUM_OF_FENGZHI_LAST = 21;
     // 峰值时段转置所在行
-    public static final int ROW_NUM_OF_FENGZHISHIDUAN = 16;
+    private static final int ROW_NUM_OF_FENGZHISHIDUAN = 16;
     // 上周峰值时段转置所在行
-    public static final int ROW_NUM_OF_FENGZHISHIDUAN_LAST = 22;
+    private static final int ROW_NUM_OF_FENGZHISHIDUAN_LAST = 22;
     // 6以上累计时长所在行
     private static final int ROW_NUM_OF_SIX = 17;
     // 上周6以上累计时长
@@ -94,22 +100,18 @@ public class ChuGaoOperationService {
         this.quanLuWangService = new QuanLuWangService();
     }
 
-    // 获取早晚高峰指数
-    //Map<DayOfWeek, Row> zaoWanGaoFengZhiShu = zaoWanGaoFengZhiShuService.findZaoWanGaoFengZhiShu(zaowangaofengWorkbook);
-    // 获取 峰值时段转置表.xlsx 中的峰值
-    //Map<DayOfWeek, String> fengZhiShiDuanZhuanZhi = fengZhiShiDuanZhuanZhiService.findFengZhiShiDuanZhuanZhi()
-    //
-    public void operations(XSSFWorkbook workbook,
-                           XSSFWorkbook zaowangaofengWorkbook,
-                           XSSFWorkbook yongDuZhiShuWorkBook,
-                           XSSFWorkbook fengZhiShiDuanZhuanZhiWorkbook,
-                           XSSFWorkbook quanLuWangWorkbook,
+    public void operations(Map<String, String> excelPaths,
                            String zhou, String benginDate, String endDate) throws Exception {
+        XSSFWorkbook workbook = new XSSFWorkbook(excelPaths.get(CommonUtil.NAME_FROM));
         XSSFSheet sheet = workbook.getSheet(CommonUtil.SHEET_ZHI_SHU_YUCE);
         if (sheet == null) {
             throw new Exception("无法获取" + CommonUtil.SHEET_ZHI_SHU_YUCE + ", 请检查初稿中是否有该Sheet");
         }
 
+        XSSFWorkbook yongDuZhiShuWorkBook = new XSSFWorkbook(excelPaths.get(CommonUtil.NAME_YONG_DU_SHI_CHANG));
+        XSSFWorkbook fengZhiShiDuanZhuanZhiWorkbook = new XSSFWorkbook(excelPaths.get(CommonUtil.NAME_FENG_ZHI_SHI_DUAN_ZHUAN_ZHI));
+        XSSFWorkbook zaowangaofengWorkbook = new XSSFWorkbook(excelPaths.get(CommonUtil.NAME_ZAO_WAN_GAO_FENG_ZHI_SHU));
+        XSSFWorkbook quanLuWangWorkbook = new XSSFWorkbook(excelPaths.get(CommonUtil.NAME_QUAN_LU_WANG));
         // 获取数据
         Map<DayOfWeek, Row> yongDuShiChang = yongDuShiChangService.findYongDuShiChang(yongDuZhiShuWorkBook);
         Map<DayOfWeek, String> fengZhiShiDuan = fengZhiShiDuanZhuanZhiService.findFengZhiShiDuanZhuanZhi(fengZhiShiDuanZhuanZhiWorkbook);
@@ -119,6 +121,7 @@ public class ChuGaoOperationService {
         /* 开始处理 指数预测Sheet */
         // 插入新一周
         insertNewWeekZhiShu(workbook, sheet, zhou, benginDate, endDate);
+
 
         // 插入早高峰
         insertZaoGaoFeng(sheet, zaoWanGaoFengZhiShu);
@@ -155,6 +158,22 @@ public class ChuGaoOperationService {
         }
         insertSheetYongDuShiChang(ydscSheet, yongDuShiChang);
         /* 结束处理 拥堵时长sheet */
+
+        /* 开始处理 历年同期指数sheet */
+        XSSFSheet jueceshuSheet = workbook.getSheet(CommonUtil.SHEET_LINIAN_TONGQI);
+        insertFourSheet(workbook, jueceshuSheet, zwgfzsSheet);
+        /* 结束处理 历年同期指数sheet */
+        Thread.sleep(1000);
+        OutputStream out = null;
+        try {
+            out = new FileOutputStream(excelPaths.get(CommonUtil.NAME_TO));
+            workbook.write(out);
+            out.close();
+        } catch (FileNotFoundException e) {
+            e.printStackTrace();
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
     }
 
 
@@ -163,7 +182,7 @@ public class ChuGaoOperationService {
      * 插入新一周的
      */
     private void insertNewWeekZhiShu(XSSFWorkbook workbook, XSSFSheet zhiShuYuCeSheet, String zhou, String benginDate, String endDate) {
-        zhiShuYuCeSheet.shiftRows(START_ROW_NUM, zhiShuYuCeSheet.getLastRowNum(), SHIFT_ROW_NUM);
+        zhiShuYuCeSheet.shiftRows(13, zhiShuYuCeSheet.getLastRowNum(), 6);
 
         for (int i = (START_ROW_NUM + SHIFT_ROW_NUM), j = START_ROW_NUM; i < (START_ROW_NUM + SHIFT_ROW_NUM + SHIFT_ROW_NUM); i++, j++) {
             copyRow(workbook, i, j, true, zhiShuYuCeSheet, zhou, benginDate, endDate);
@@ -197,8 +216,8 @@ public class ChuGaoOperationService {
         row.getCell(SHEET_THURSDAY).setCellValue(fengZhiShiDuan.get(DayOfWeek.THURSDAY));
         row.getCell(SHEET_FRIDAY).setCellValue(fengZhiShiDuan.get(DayOfWeek.FRIDAY));
         XSSFRow lastRow = sheet.getRow(ROW_NUM_OF_FENGZHISHIDUAN_LAST);
-        row.getCell(SHEET_SATURDAY).setCellValue(fengZhiShiDuan.get(DayOfWeek.SATURDAY));
-        row.getCell(SHEET_SUNDAY).setCellValue(fengZhiShiDuan.get(DayOfWeek.SUNDAY));
+        lastRow.getCell(SHEET_SATURDAY).setCellValue(fengZhiShiDuan.get(DayOfWeek.SATURDAY));
+        lastRow.getCell(SHEET_SUNDAY).setCellValue(fengZhiShiDuan.get(DayOfWeek.SUNDAY));
     }
 
     // 插入6以上累计时长
@@ -223,8 +242,13 @@ public class ChuGaoOperationService {
 
         for (int i = 0; i < 7; i++) {
             XSSFRow row = zwgfzsSheet.createRow(zwgfzsSheet.getLastRowNum() + 1);
+            boolean isWorkingDay = true;
             row.setHeight(styleRow.getHeight());
             XSSFRow fromRow = getZaoWanGaoFengZhiShuFromMap(zaoWanGaoFengZhiShu, i);
+            DayOfWeek day = cn.huibao.util.DateUtil.getDayOfWeekFromStr(fromRow.getCell(1).getStringCellValue());
+            if (DayOfWeek.SATURDAY == day || DayOfWeek.SUNDAY == day) {
+                isWorkingDay = false;
+            }
             for (int j = 0; j < 8; j++) {
                 Cell cell = row.createCell(j);
                 if (j == 0) {
@@ -233,8 +257,12 @@ public class ChuGaoOperationService {
                     cell.setCellValue(num);
                     continue;
                 }
-                if (j == 5 || j == 6) {
-                    cell.setCellStyle(workingDayCellStyle);
+                if (j == 4 || j == 5) {
+                    if (isWorkingDay) {
+                        cell.setCellStyle(workingDayCellStyle);
+                    } else {
+                        cell.setCellStyle(normalCellStyle);
+                    }
                     cell.setCellValue(fromRow.getCell(j).getNumericCellValue());
                     continue;
                 }
@@ -316,7 +344,7 @@ public class ChuGaoOperationService {
 
         XSSFRow lastRow = sheet.getRow(rowNumLast);
         lastRow.getCell(SHEET_SATURDAY).setCellValue(
-                zaoWanGaoFengZhiShu.get(DayOfWeek.MONDAY).getCell(zaowanfengNumInSheet).getNumericCellValue()
+                zaoWanGaoFengZhiShu.get(DayOfWeek.SATURDAY).getCell(zaowanfengNumInSheet).getNumericCellValue()
         );
         lastRow.getCell(SHEET_SUNDAY).setCellValue(
                 zaoWanGaoFengZhiShu.get(DayOfWeek.SUNDAY).getCell(zaowanfengNumInSheet).getNumericCellValue()
@@ -453,4 +481,121 @@ public class ChuGaoOperationService {
 
         return sb.toString();
     }
+
+    /**
+     * 插入Sheet 历年同期指数
+     */
+    public void insertFourSheet(XSSFWorkbook workbook, XSSFSheet liniantongqiSheet, XSSFSheet zaowangaofengzhishuSheet) {
+        // sheet4 删除头7行（上一周）数据
+        // 删除第2-8行数据
+        for (int i = 0; i < 7; i++) {
+            liniantongqiSheet.shiftRows(2, liniantongqiSheet.getLastRowNum(), -1);
+        }
+        int lastRowNum = liniantongqiSheet.getLastRowNum();
+        int index2016, index2017;
+        index2016 = (int) liniantongqiSheet.getRow(lastRowNum).getCell(0).getNumericCellValue();
+        index2017 = (int) liniantongqiSheet.getRow(lastRowNum).getCell(9).getNumericCellValue();
+        boolean b2016 = true;
+        boolean b2017 = true;
+        Map<Integer, List<Object>> map = new HashMap<>();
+        Map<Integer, List<Object>> map2017 = new HashMap<>();
+        // 获取数据
+        for (int i = 0; i < zaowangaofengzhishuSheet.getLastRowNum(); i++) {
+            b2016 = lalal(zaowangaofengzhishuSheet, index2016, index2016, b2016, map, i);
+            b2017 = lalal(zaowangaofengzhishuSheet, index2016, index2017, b2017, map, i);
+        }
+
+
+        // sheet4 复制最后7行
+        for (int i = 6, j = 1; i >= 0; i--, j++) {
+            copyRow(workbook, lastRowNum - i,
+                    lastRowNum + j, true, liniantongqiSheet,
+                    "", "", "");
+        }
+
+        index2016++;
+        index2017++;
+        // 填充同期数据
+        for (int i = (liniantongqiSheet.getLastRowNum() - 6); i <= liniantongqiSheet.getLastRowNum(); i++, ++index2016, ++index2017) {
+            List<Object> list16 = new ArrayList<>();
+            list16 = map.get(index2016);
+            List<Object> list17 = new ArrayList<>();
+            list17 = map.get(index2017);
+            for (int j = 0; j <= 17; j++) {
+                if (j == 8) {
+                    if (liniantongqiSheet.getRow(i).getCell(j) == null) {
+                        if (null != list16) {
+                            liniantongqiSheet.getRow(i).createCell(j).setCellValue((String) list16.get(j));
+                        }
+                    } else {
+                        if (null != list16) {
+                            liniantongqiSheet.getRow(i).getCell(j).setCellValue((String) list16.get(j));
+                        } else {
+                            liniantongqiSheet.getRow(i).getCell(j).setCellValue("");
+                        }
+                    }
+                    continue;
+                }
+                if (j == 17) {
+                    if (liniantongqiSheet.getRow(i).getCell(j) == null) {
+                        if (null != list17) {
+                            liniantongqiSheet.getRow(i).createCell(j).setCellValue((String) list17.get(j - 9));
+                        }
+                    } else {
+                        if (null != list17) {
+                            liniantongqiSheet.getRow(i).getCell(j).setCellValue((String) list17.get(j - 9));
+                        } else {
+                            liniantongqiSheet.getRow(i).getCell(j).setCellValue("");
+                        }
+                    }
+                    continue;
+                }
+
+                if (liniantongqiSheet.getRow(i).getCell(j) == null) {
+                    liniantongqiSheet.getRow(i).createCell(j);
+                }
+                Cell cell = liniantongqiSheet.getRow(i).getCell(j);
+                if (cell.getCellTypeEnum().equals(CellType.STRING)) {
+                    if (j <= 7) {
+                        cell.setCellValue((String) list16.get(j));
+                    } else {
+                        cell.setCellValue((String) list17.get(j - 9));
+                    }
+                } else if (cell.getCellTypeEnum().equals(CellType.NUMERIC)) {
+                    if (j <= 7) {
+                        cell.setCellValue((Double) list16.get(j));
+                    } else {
+                        cell.setCellValue((Double) list17.get(j - 9));
+                    }
+                } else {
+                    System.out.println("偶错误啊");
+                }
+            }
+        }
+    }
+
+    private static boolean lalal(XSSFSheet zaowangaofengzhishu_Sheet, int index2016, int index2017, boolean b2017, Map<Integer, List<Object>> map2017, int i) {
+        if (b2017 && index2017 == zaowangaofengzhishu_Sheet.getRow(i).getCell(0).getNumericCellValue()) {
+            for (int j = i + 1; j <= i + 7; j++) {
+                List<Object> list = new ArrayList<>();
+                for (int k = 0; k < 9; k++) {
+                    if (k == 8) {
+                        if (null == zaowangaofengzhishu_Sheet.getRow(j).getCell(k)) {
+                            list.add("");
+                        } else {
+                            list.add(zaowangaofengzhishu_Sheet.getRow(j).getCell(k).getStringCellValue());
+                        }
+                    } else if (k != 1) {
+                        list.add(zaowangaofengzhishu_Sheet.getRow(j).getCell(k).getNumericCellValue());
+                    } else {
+                        list.add(zaowangaofengzhishu_Sheet.getRow(j).getCell(k).getStringCellValue());
+                    }
+                }
+                map2017.put(j - 1, list);
+            }
+            b2017 = false;
+        }
+        return b2017;
+    }
+
 }

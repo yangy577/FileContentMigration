@@ -46,4 +46,14 @@ public class CommonUtil {
     public static final String SHEET_ZAO_WAN_GAO_FENG = "早晚高峰指数";
     public static final String SHEET_YONG_DU = "拥堵时长";
     public static final String SHEET_LINIAN_TONGQI = "历年同期指数";
+
+    public static final String NAME_FENG_ZHI_SHI_DUAN_ZHUAN_ZHI = "峰值时段转置表";
+    public static final String NAME_FENG_ZHI_ZHUAN_ZHI = "峰值转置表";
+    public static final String NAME_YONG_DU_SHI_CHANG = "拥堵时长";
+    public static final String NAME_QUAN_LU_WANG = "全路网高峰指数_峰值_峰值时段";
+    public static final String NAME_ZAO_WAN_GAO_FENG_ZHI_SHU = "早晚高峰指数";
+    public static final String NAME_FROM = "初稿";
+    public static final String NAME_TO = "生成文件";
+
+
 }
